@@ -11,6 +11,7 @@ from discord.ext import commands
 import itertools
 from discord.ext import commands
 from discord import Embed
+import dotenv,os
 
 bot = commands.Bot(command_prefix='-') #กำหนด Prefix
 
@@ -381,11 +382,7 @@ async def skip(ctx):
         await ctx.send('~(=^‥^)/ SKIP SUCCESSFULLY ', delete_after=5)
 
 
+dotenv.load_dotenv()
+secret = os.environ.get('secret')
 
-
-
-
-
-
-
-bot.run('ODYxOTA2NTcwNTc1ODcyMDEw.YOQnCw.tisousxHAEu40Fh72qfJpazJrmI') #รันบอท (โดยนำ TOKEN จากบอทที่เราสร้างไว้นำมาวาง)
+bot.run(secret) #รันบอท (โดยนำ TOKEN จากบอทที่เราสร้างไว้นำมาวาง)

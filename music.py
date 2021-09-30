@@ -108,7 +108,7 @@ class MusicPlayer:
         self.queue = asyncio.Queue()
         self.next = asyncio.Event()
 
-        self.np = None  # Now playing message
+        self.np = None
         self.volume = .5
         self.current = None
 
@@ -122,15 +122,16 @@ class MusicPlayer:
             self.next.clear()
 
             try:
-                # Wait for the next song. If we timeout cancel the player and disconnect...
-                async with timeout(300):  # 5 minutes...
+                async with timeout(60):
                     source = await self.queue.get()
             except asyncio.TimeoutError:
-                return await self.destroy(self._guild)
+                pass
+                # return await bot.voice_clients.disconnect()
+                # if self in self._cog.players.values():
+                #     return await self.destroy(self._guild)
+                # return
 
             if not isinstance(source, YTDLSource):
-                # Source was probably a stream (not downloaded)
-                # So we should regather to prevent stream expiration
                 try:
                     source = await YTDLSource.regather_stream(source, loop=self.bot.loop)
                 except Exception as e:
@@ -145,21 +146,15 @@ class MusicPlayer:
             self.np = await self._channel.send(f'**Now Playing:** `{source.title}` requested by 'f'`{source.requester}`')
             await self.next.wait()
 
-            # Make sure the FFmpeg process is cleaned up.
             source.cleanup()
             self.current = None
 
             try:
-                # We are no longer playing this song...
                 await self.np.delete()
             except discord.HTTPException:
                 pass
 
-    async def destroy(self, guild):
-        """Disconnect and cleanup the player."""
-        del players[self._guild]
-        await self._guild.voice_client.disconnect()
-        return self.bot.loop.create_task(self._cog.cleanup(guild))
+
 
 
 # wrapper / decorators
@@ -314,19 +309,31 @@ async def resume(ctx):
 
     if voice_client != None and voice_client.channel == channel:
         voice_client.resume()
-    await ctx.message.add_reaction('✅')
-    await ctx.channel.send("~(=^‥^)/ MUSIC CONTINUES", delete_after=5)
+        await ctx.message.add_reaction('✅')
+        await ctx.channel.send("~(=^‥^)/ MUSIC CONTINUES", delete_after=5)
 
 # คำสั่งออกจากvc (ใช้ได้)
 @bot.command()
 async def leave(ctx):
+    channel = ctx.author.voice.channel
     voice_client = get(bot.voice_clients, guild=ctx.guild)
-    if voice_client and voice_client.is_connected():
+
+    if voice_client != channel:
+        await getUserVoiceState(ctx)
+
+    if voice_client == None:
+        await ctx.channel.send("I'm is not connected to vc (=^‥^=)")
+        return
+
+    if voice_client.channel != channel:
+        await ctx.message.add_reaction('❌')
+        await ctx.channel.send("I'm currently connected to ** {0} channel** (=^‥^=)".format(voice_client.channel))
+        return
+
+    if voice_client != None and voice_client.channel == channel:
         await voice_client.disconnect()
         await ctx.message.add_reaction('👋')
         await ctx.channel.send("Bye Bye ヽ(^‥^=ゞ)", delete_after=10)
-    else:
-        await getUserVoiceState(ctx)
 
 # คำสั่งดูคิว (ใช้ได้)
 @bot.command()
@@ -380,6 +387,34 @@ async def skip(ctx):
         voice_client.stop()
         await ctx.message.add_reaction('✅')
         await ctx.send('~(=^‥^)/ SKIP SUCCESSFULLY ', delete_after=5)
+
+
+@bot.command()
+async def cleanup(self, guild):
+        try:
+            await guild.voice_client.disconnect()
+        except AttributeError:
+            pass
+
+        try:  
+            for entry in self.players[guild.id].queue._queue:
+                if isinstance(entry, YTDLSource): 
+                    entry.cleanup()
+            self.players[guild.id].queue._queue.clear()
+        except KeyError:
+            pass                        
+                       
+        try:
+            del self.players[guild.id]
+        except KeyError:
+            pass
+
+
+
+
+
+
+
 
 
 dotenv.load_dotenv()
